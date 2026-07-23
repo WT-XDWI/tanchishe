@@ -3,7 +3,7 @@
 <head>
     <meta http-equiv="X-UA-Compatible" content="IE=6">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>贪吃蛇 - 全操控 + 智能食物</title>
+    <title>贪吃蛇 - 全操控 + 智能食物（优化版）</title>
     <style>
         /* ===== 极致兼容 IE6 样式 ===== */
         body {
@@ -78,7 +78,6 @@
             zoom: 1;
         }
 
-        /* 游戏结束遮罩 */
         #gameOverlay {
             position: absolute;
             left: 0;
@@ -140,7 +139,6 @@
             background: #0288d1;
         }
 
-        /* 方向控制按钮 */
         .controls {
             margin-top: 14px;
             text-align: center;
@@ -213,7 +211,6 @@
 <body>
 
     <div class="game-wrapper">
-        <!-- 头部 -->
         <div class="header clearfix">
             <div class="title">🐍 <span>贪吃蛇</span></div>
             <div class="score-area">
@@ -223,10 +220,8 @@
             </div>
         </div>
 
-        <!-- 画布 -->
         <div class="canvas-wrap" id="canvasWrap">
             <div id="gameContainer"></div>
-            <!-- 游戏结束遮罩 -->
             <div id="gameOverlay">
                 <div class="overlay-content">
                     <div class="icon" id="overlayIcon">💀</div>
@@ -237,7 +232,6 @@
             </div>
         </div>
 
-        <!-- 方向控制按钮 -->
         <div class="controls">
             <table cellpadding="0" cellspacing="0">
                 <tr>
@@ -278,6 +272,7 @@
     <script>
         // ================================================================
         //  贪吃蛇 - 全操控方式 + 智能食物（BFS可达性检测）
+        //  优化：颜色十六进制、触摸被动选项、内存释放注释
         //  兼容 IE6 及所有现代浏览器
         // ================================================================
 
@@ -310,7 +305,7 @@
         var overlayIcon = document.getElementById('overlayIcon');
         container = document.getElementById('gameContainer');
 
-        // ---------- Cookie 最高分 ----------
+        // ---------- Cookie 最高分 (有效期365天) ----------
         function getBestScore() {
             var name = 'snakeBest=';
             var ca = document.cookie.split(';');
@@ -329,6 +324,7 @@
         function setBestScore(val) {
             var d = new Date();
             d.setFullYear(d.getFullYear() + 1);
+            // SameSite 对单机游戏无影响，保留默认
             document.cookie = 'snakeBest=' + val + '; expires=' + d.toGMTString() + '; path=/';
         }
 
@@ -342,7 +338,7 @@
             return false;
         }
 
-        // 从蛇头进行 BFS，检测目标是否可达（不会被蛇身围死）
+        // BFS 检测目标是否可达
         function isReachableFromHead(targetX, targetY) {
             var head = snake[0];
             var queue = [];
@@ -352,7 +348,6 @@
             queue.push([head[0], head[1]]);
             visited[head[0] + ',' + head[1]] = true;
 
-            // 构建蛇身阻挡集合
             var snakeBlock = {};
             for (var i = 0; i < snake.length; i++) {
                 snakeBlock[snake[i][0] + ',' + snake[i][1]] = true;
@@ -392,7 +387,6 @@
             var attempts = 0;
             var maxAttempts = 80;
 
-            // 优先尝试在可达的空位生成
             while (attempts < maxAttempts) {
                 var fx = Math.floor(Math.random() * GRID_SIZE);
                 var fy = Math.floor(Math.random() * GRID_SIZE);
@@ -404,7 +398,6 @@
                 attempts++;
             }
 
-            // 保底：遍历所有格子，确保必定生成一个可达的食物
             for (var y = 0; y < GRID_SIZE; y++) {
                 for (var x = 0; x < GRID_SIZE; x++) {
                     if (!isOccupied(x, y) && isReachableFromHead(x, y)) {
@@ -415,7 +408,6 @@
                 }
             }
 
-            // 没有空位或全部不可达 -> 玩家胜利（蛇已填满棋盘）
             endGame(true);
         }
 
@@ -479,13 +471,11 @@
                 newSnake.push(snake[i]);
             }
 
-            // 撞墙检测
             if (newHead[0] < 0 || newHead[0] >= GRID_SIZE || newHead[1] < 0 || newHead[1] >= GRID_SIZE) {
                 endGame(false);
                 return;
             }
 
-            // 撞自身检测
             for (var j = 1; j < newSnake.length; j++) {
                 if (newSnake[j][0] === newHead[0] && newSnake[j][1] === newHead[1]) {
                     endGame(false);
@@ -498,8 +488,7 @@
             if (ateFood) {
                 score++;
                 updateScoreUI();
-                spawnFood(); // 这里会触发胜利检测
-                // 如果 spawnFood 触发了胜利，游戏结束
+                spawnFood();
                 if (gameOver) {
                     render();
                     return;
@@ -532,7 +521,7 @@
             render();
         }
 
-        // ---------- 渲染 (DOM 分层：网格层 + 对象层) ----------
+        // ---------- 渲染：网格层 + 对象层 ----------
         function buildGrid() {
             var gridDiv = document.createElement('div');
             gridDiv.id = 'gridLayer';
@@ -556,7 +545,13 @@
             container.appendChild(gridDiv);
         }
 
+        // 将 rgb 颜色转换为十六进制 (兼容 IE6)
+        function rgbToHex(r, g, b) {
+            return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        }
+
         function render() {
+            // 移除旧对象层，避免内存累积（此处无事件绑定，安全）
             var oldObj = document.getElementById('objectLayer');
             if (oldObj) {
                 container.removeChild(oldObj);
@@ -575,12 +570,12 @@
 
             var html = '';
 
-            // 食物
+            // 食物 (红色十六进制)
             html += '<div style="position:absolute;left:' + (food.x * CELL_SIZE) + 'px;top:' + (food.y * CELL_SIZE) +
                 'px;width:' + CELL_SIZE + 'px;height:' + CELL_SIZE +
-                'px;background:#ff4757;font-size:0;overflow:hidden;border:1px solid #cc2233;z-index:2;border-radius:2px;"></div>';
+                'px;background:#ff4757;font-size:0;overflow:hidden;border:1px solid #cc2233;z-index:2;"></div>';
 
-            // 蛇
+            // 蛇 (全部使用十六进制颜色)
             for (var i = 0; i < snake.length; i++) {
                 var x = snake[i][0] * CELL_SIZE;
                 var y = snake[i][1] * CELL_SIZE;
@@ -594,7 +589,7 @@
                     var r = Math.round(60 + 50 * ratio);
                     var g = Math.round(200 - 40 * ratio);
                     var b = Math.round(220 - 30 * ratio);
-                    color = 'rgb(' + r + ',' + g + ',' + b + ')';
+                    color = rgbToHex(r, g, b);
                     borderColor = '#2ecc71';
                 }
 
@@ -654,10 +649,10 @@
             var key = e.keyCode;
             var dir = null;
 
-            if (key === 38 || key === 87) dir = 'up'; // 上 / W
-            else if (key === 40 || key === 83) dir = 'down'; // 下 / S
-            else if (key === 37 || key === 65) dir = 'left'; // 左 / A
-            else if (key === 39 || key === 68) dir = 'right'; // 右 / D
+            if (key === 38 || key === 87) dir = 'up';
+            else if (key === 40 || key === 83) dir = 'down';
+            else if (key === 37 || key === 65) dir = 'left';
+            else if (key === 39 || key === 68) dir = 'right';
             else return true;
 
             e.returnValue = false;
@@ -666,7 +661,7 @@
         };
 
         // ================================================================
-        //  2. 触摸滑动支持
+        //  2. 触摸滑动支持 (显式设置 passive: false 以确保 preventDefault 生效)
         // ================================================================
         (function initTouchSupport() {
             if (typeof window.addEventListener !== 'function') return;
@@ -675,6 +670,17 @@
                 touchStartY = 0;
             var isTouching = false;
             var threshold = 30;
+
+            // 检测是否支持 passive 选项
+            var supportsPassive = false;
+            try {
+                var opts = Object.defineProperty({}, 'passive', {
+                    get: function() { supportsPassive = true; }
+                });
+                window.addEventListener('test', null, opts);
+            } catch (e) {}
+
+            var passiveOption = supportsPassive ? { passive: false } : false;
 
             container.addEventListener('touchstart', function(e) {
                 var touch = e.touches[0];
@@ -712,7 +718,7 @@
                 touchStartX = touch.clientX;
                 touchStartY = touch.clientY;
                 e.preventDefault();
-            }, false);
+            }, passiveOption);
 
             container.addEventListener('touchend', function(e) {
                 isTouching = false;
@@ -778,7 +784,6 @@
             gameInterval = setInterval(move, MOVE_INTERVAL);
         }
 
-        // 页面加载完成后启动
         startGame();
     </script>
 
